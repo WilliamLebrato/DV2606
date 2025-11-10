@@ -31,7 +31,9 @@ void do1000Transactions(unsigned long id) {
 
 void* child(void* buf) {
     unsigned long childID = (unsigned long)buf;
+    pthread_mutex_lock(&lock);
     do1000Transactions(childID);
+    pthread_mutex_unlock(&lock);
     return NULL;
 }
 
