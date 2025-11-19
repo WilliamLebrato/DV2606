@@ -14,8 +14,8 @@
 #define MEGA (1024*1024)
 #define MAX_ITEMS (64*MEGA)
 #define swap(v, a, b) {unsigned tmp; tmp=v[a]; v[a]=v[b]; v[b]=tmp;}
-#define NUM_THREADS 32
-#define MAX_DEPTH 5
+#define NUM_THREADS 512
+#define MAX_DEPTH 15
 
 struct QuickSortTask {
     int* array;
@@ -58,6 +58,19 @@ init_array(void)
     v = (int *) malloc(MAX_ITEMS*sizeof(int));
     for (i = 0; i < MAX_ITEMS; i++)
         v[i] = rand();
+}
+
+static void
+validate_array(void)
+{
+    int i;
+    for (i = 1; i < MAX_ITEMS; i++) {
+        if (v[i-1] > v[i]) {
+            printf("Array not sorted at index %d: %d > %d\n", i-1, v[i-1], v[i]);
+            return;
+        }
+    }
+    printf("Array is sorted.\n");
 }
 
 static unsigned
@@ -291,6 +304,7 @@ main(int argc, char **argv)
     //print_array();
 
     shutdown_thread_pool();
+    validate_array();
     free(v);
 
     return 0;
