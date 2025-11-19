@@ -5,11 +5,24 @@
  ***************************************************************************/
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h> 
+#include <pthread.h>
+#include <stdlib.h>   // atoi, exit, rand
+#include <string.h>   // strcmp
+
+
 #define MAX_SIZE 4096
+#define NUM_THREADS 15
 
 typedef double matrix[MAX_SIZE][MAX_SIZE];
+
+typedef struct {
+    int k;
+    int thread_id;
+} thread_data;
+
+thread_data data[NUM_THREADS];
+pthread_t threads[NUM_THREADS];
+
 
 int	N;		/* matrix size		*/
 int	maxnum;		/* max number of element*/
@@ -39,6 +52,26 @@ main(int argc, char **argv)
 	   Print_Matrix();
 }
 
+void *eliminate(void *arg)
+{
+    thread_data *data = (thread_data *)arg;  // cast to the right type
+
+    int k = data->k;
+    int thread_id = data->thread_id;
+
+    int i, j;
+    for (i = k + 1 + thread_id; i < N; i += NUM_THREADS) {
+        for (j = k + 1; j < N; j++) {
+            A[i][j] = A[i][j] - A[i][k] * A[k][j];  /* Elimination step */
+        }
+        b[i] = b[i] - A[i][k] * y[k];
+        A[i][k] = 0.0;
+    }
+
+    pthread_exit(NULL);
+}
+
+
 void
 work(void)
 {
@@ -50,12 +83,16 @@ work(void)
 	       A[k][j] = A[k][j] / A[k][k]; /* Division step */
 	    y[k] = b[k] / A[k][k];
 	    A[k][k] = 1.0;
-	    for (i = k+1; i < N; i++) {
-	        for (j = k+1; j < N; j++)
-		        A[i][j] = A[i][j] - A[i][k]*A[k][j]; /* Elimination step */
-	        b[i] = b[i] - A[i][k]*y[k];
-	        A[i][k] = 0.0;
-	    }
+        // Parallel Threads, eliminating multiple rows each
+        for (i = 0; i < NUM_THREADS; i++) {
+            data[i].k = k;
+            data[i].thread_id = i;
+            pthread_create(&threads[i], NULL, eliminate, (void *)&data[i]);
+        }
+        for (i = 0; i < NUM_THREADS; i++) {
+            pthread_join(threads[i], NULL);
+        }
+
     }
 }
 

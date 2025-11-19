@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define KILO (1024)
 #define MEGA (1024*1024)
@@ -88,8 +89,27 @@ quick_sort(int *v, unsigned low, unsigned high)
 int
 main(int argc, char **argv)
 {
+    struct timespec start, end;
+    double elapsed;
+
     init_array();
     //print_array();
+
+    // Start timing
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
     quick_sort(v, 0, MAX_ITEMS-1);
+
+    // End timing
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    // Calculate elapsed time in seconds
+    elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    printf("Quick sort time: %.6f seconds\n", elapsed);
+
     //print_array();
+    free(v);
+
+    return 0;
 }
