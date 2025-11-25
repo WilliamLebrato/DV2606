@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <stdlib.h>   // atoi, exit, rand
 #include <string.h>   // strcmp
+#include <stdbool.h>
 
 
 #define MAX_SIZE 4096
@@ -15,13 +16,25 @@
 
 typedef double matrix[MAX_SIZE][MAX_SIZE];
 
-typedef struct {
+typedef struct gaussian_task {
     int k;
     int thread_id;
-} thread_data;
+    struct gaussian_task* next;
+} gaussian_task;
 
-thread_data data[NUM_THREADS];
-pthread_t threads[NUM_THREADS];
+typedef struct {
+    pthread_t threads[NUM_THREADS];
+    gaussian_task* task_queue_head;
+    gaussian_task* task_queue_tail;
+    pthread_mutex_t queue_mutex;
+    pthread_cond_t queue_cond;
+    pthread_cond_t complete_cond;
+    int active_tasks;
+    int total_tasks;
+    bool shutdown;
+} ThreadPool;
+
+static ThreadPool pool;
 
 
 int	N;		/* matrix size		*/
@@ -38,6 +51,9 @@ void Init_Matrix(void);
 void Print_Matrix(void);
 void Init_Default(void);
 int Read_Options(int, char **);
+static void init_thread_pool(void);
+static void shutdown_thread_pool(void);
+static void wait_for_completion(void);
 
 int
 main(int argc, char **argv)
@@ -47,30 +63,141 @@ main(int argc, char **argv)
     Init_Default();		/* Init default values	*/
     Read_Options(argc,argv);	/* Read arguments	*/
     Init_Matrix();		/* Init the matrix	*/
+    init_thread_pool();
     work();
+    shutdown_thread_pool();
     if (PRINT == 1)
 	   Print_Matrix();
 }
 
-void *eliminate(void *arg)
+static void enqueue_task(gaussian_task* task)
 {
-    thread_data *data = (thread_data *)arg;  // cast to the right type
+    pthread_mutex_lock(&pool.queue_mutex);
 
-    int k = data->k;
-    int thread_id = data->thread_id;
-
-    int i, j;
-    for (i = k + 1 + thread_id; i < N; i += NUM_THREADS) {
-        for (j = k + 1; j < N; j++) {
-            A[i][j] = A[i][j] - A[i][k] * A[k][j];  /* Elimination step */
-        }
-        b[i] = b[i] - A[i][k] * y[k];
-        A[i][k] = 0.0;
+    task->next = NULL;
+    if (pool.task_queue_tail == NULL) {
+        pool.task_queue_head = task;
+        pool.task_queue_tail = task;
+    } else {
+        pool.task_queue_tail->next = task;
+        pool.task_queue_tail = task;
     }
 
-    pthread_exit(NULL);
+    pool.total_tasks++;
+
+    pthread_cond_signal(&pool.queue_cond);
+    pthread_mutex_unlock(&pool.queue_mutex);
 }
 
+static gaussian_task* dequeue_task(void)
+{
+    gaussian_task* task = NULL;
+
+    pthread_mutex_lock(&pool.queue_mutex);
+
+    while (pool.task_queue_head == NULL && !pool.shutdown) {
+        pthread_cond_wait(&pool.queue_cond, &pool.queue_mutex);
+    }
+
+    if (pool.task_queue_head != NULL) {
+        task = pool.task_queue_head;
+        pool.task_queue_head = task->next;
+        if (pool.task_queue_head == NULL) {
+            pool.task_queue_tail = NULL;
+        }
+        pool.active_tasks++;
+    }
+
+    pthread_mutex_unlock(&pool.queue_mutex);
+
+    return task;
+}
+
+static void task_completed(void)
+{
+    pthread_mutex_lock(&pool.queue_mutex);
+    pool.active_tasks--;
+    pool.total_tasks--;
+
+    if (pool.active_tasks == 0 && pool.total_tasks == 0) {
+        pthread_cond_signal(&pool.complete_cond);
+    }
+
+    pthread_mutex_unlock(&pool.queue_mutex);
+}
+
+static void* worker_thread(void* arg)
+{
+    (void)arg;
+
+    while (1) {
+        gaussian_task* task = dequeue_task();
+
+        if (task == NULL) {
+            break;
+        }
+
+        int k = task->k;
+        int thread_id = task->thread_id;
+        int i, j;
+        for (i = k + 1 + thread_id; i < N; i += NUM_THREADS) {
+            for (j = k + 1; j < N; j++) {
+                A[i][j] = A[i][j] - A[i][k] * A[k][j];
+            }
+            b[i] = b[i] - A[i][k] * y[k];
+            A[i][k] = 0.0;
+        }
+
+        free(task);
+        task_completed();
+    }
+
+    return NULL;
+}
+
+static void init_thread_pool(void)
+{
+    pool.task_queue_head = NULL;
+    pool.task_queue_tail = NULL;
+    pool.active_tasks = 0;
+    pool.total_tasks = 0;
+    pool.shutdown = false;
+
+    pthread_mutex_init(&pool.queue_mutex, NULL);
+    pthread_cond_init(&pool.queue_cond, NULL);
+    pthread_cond_init(&pool.complete_cond, NULL);
+
+    for (int i = 0; i < NUM_THREADS; i++) {
+        pthread_create(&pool.threads[i], NULL, worker_thread, NULL);
+    }
+}
+
+static void shutdown_thread_pool(void)
+{
+    pthread_mutex_lock(&pool.queue_mutex);
+    pool.shutdown = true;
+    pthread_cond_broadcast(&pool.queue_cond);
+    pthread_mutex_unlock(&pool.queue_mutex);
+
+    for (int i = 0; i < NUM_THREADS; i++) {
+        pthread_join(pool.threads[i], NULL);
+    }
+
+    pthread_mutex_destroy(&pool.queue_mutex);
+    pthread_cond_destroy(&pool.queue_cond);
+    pthread_cond_destroy(&pool.complete_cond);
+}
+
+static void wait_for_completion(void)
+{
+    pthread_mutex_lock(&pool.queue_mutex);
+
+    while (pool.active_tasks > 0 || pool.total_tasks > 0) {
+        pthread_cond_wait(&pool.complete_cond, &pool.queue_mutex);
+    }
+
+    pthread_mutex_unlock(&pool.queue_mutex);
+}
 
 void
 work(void)
@@ -85,14 +212,12 @@ work(void)
 	    A[k][k] = 1.0;
         // Parallel Threads, eliminating multiple rows each
         for (i = 0; i < NUM_THREADS; i++) {
-            data[i].k = k;
-            data[i].thread_id = i;
-            pthread_create(&threads[i], NULL, eliminate, (void *)&data[i]);
+            gaussian_task* task = malloc(sizeof(gaussian_task));
+            task->k = k;
+            task->thread_id = i;
+            enqueue_task(task);
         }
-        for (i = 0; i < NUM_THREADS; i++) {
-            pthread_join(threads[i], NULL);
-        }
-
+        wait_for_completion();
     }
 }
 
