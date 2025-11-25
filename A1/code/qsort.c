@@ -14,8 +14,8 @@
 #define MEGA (1024*1024)
 #define MAX_ITEMS (64*MEGA)
 #define swap(v, a, b) {unsigned tmp; tmp=v[a]; v[a]=v[b]; v[b]=tmp;}
-#define NUM_THREADS 512
-#define MAX_DEPTH 15
+#define NUM_THREADS 32
+#define MAX_DEPTH 12
 
 struct QuickSortTask {
     int* array;
@@ -37,6 +37,14 @@ struct ThreadPool {
     bool shutdown;
 };
 
+struct InitArrayTask
+{
+    int* array;
+    unsigned start;
+    unsigned end;
+    unsigned int seed;
+};
+
 static int *v;
 static struct ThreadPool pool;
 
@@ -51,13 +59,45 @@ print_array(void)
     printf("\n");
 }
 
+
+static void* init_array_segment(void* arg)
+{
+    struct InitArrayTask* task = (struct InitArrayTask*)arg;
+    int* array = task->array;
+    unsigned start = task->start;
+    unsigned end = task->end;
+    unsigned int seed = task->seed;
+
+    for (unsigned i = start; i < end; i++) {
+        array[i] = rand_r(&seed);
+    }
+    return NULL;
+}
+
 static void
 init_array(void)
 {
     int i;
     v = (int *) malloc(MAX_ITEMS*sizeof(int));
-    for (i = 0; i < MAX_ITEMS; i++)
-        v[i] = rand();
+    // Initialize array in parallel
+    unsigned segment_size = MAX_ITEMS / NUM_THREADS;
+    pthread_t threads[NUM_THREADS];
+    struct InitArrayTask tasks[NUM_THREADS];
+
+    // Seed the random number generator
+    srand(time(NULL));
+
+    for (i = 0; i < NUM_THREADS; i++) {
+        tasks[i].array = v;
+        tasks[i].start = i * segment_size;
+        tasks[i].end = (i == NUM_THREADS - 1) ? MAX_ITEMS : (i + 1) * segment_size;
+        tasks[i].seed = rand();  // Each thread gets a different seed
+        pthread_create(&threads[i], NULL, init_array_segment, &tasks[i]);
+    }
+
+    for (i = 0; i < NUM_THREADS; i++) {
+        pthread_join(threads[i], NULL);
+    }
 }
 
 static void
