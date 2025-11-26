@@ -1,3 +1,5 @@
+//task1.cu
+
 #include <vector>
 #include <algorithm>
 #include <iostream>
@@ -39,7 +41,7 @@ void print_sort_status(std::vector<int> numbers)
 
 int main()
 {
-    constexpr unsigned int size = 100000; // Number of elements in the input
+    constexpr int size = 1 << 19;  // 524288 elements as in assignment
 
     // Initialize a vector with integers of value 0
     std::vector<int> numbers(size);

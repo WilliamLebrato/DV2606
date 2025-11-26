@@ -1,3 +1,4 @@
+//task2.cu
 #include <vector>
 #include <algorithm>
 #include <iostream>
@@ -74,8 +75,6 @@ int main()
             evenPhaseKernel<<<numBlocks, threadsPerBlock>>>(d_numbers, size);
         else
             oddPhaseKernel<<<numBlocks, threadsPerBlock>>>(d_numbers, size);
-
-        cudaDeviceSynchronize();  // GLOBAL SYNC
     }
 
     cudaMemcpy(numbers.data(), d_numbers, size * sizeof(int), cudaMemcpyDeviceToHost);

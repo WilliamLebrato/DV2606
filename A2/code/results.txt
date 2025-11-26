@@ -1,0 +1,33 @@
+(main) root@C.28167832:/workspace/DV2606/A2/code$ make all
+g++ oddevensort.cpp -o oddevensort -O3
+nvcc task1.cu -o task1
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+nvcc task2.cu -o task2
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+(main) root@C.28167832:/workspace/DV2606/A2/code$ ./oddevensort
+The input is sorted?: False
+The input is sorted?: True
+Elapsed time =  535.297 sec
+(main) root@C.28167832:/workspace/DV2606/A2/code$ ./task1
+The input is sorted?: False
+The input is sorted?: True
+Elapsed time =  1.87532 sec
+(main) root@C.28167832:/workspace/DV2606/A2/code$ nvcc task1.cu -o task1
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+(main) root@C.28167832:/workspace/DV2606/A2/code$ ./task1
+The input is sorted?: False
+The input is sorted?: True
+Elapsed time =  52.5767 sec
+(main) root@C.28167832:/workspace/DV2606/A2/code$ nvcc task2.cu -o task2
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+./task2(main) root@C.28167832:/workspace/DV2606/A2/code$ ./task2
+Sorted?: No
+Sorted?: Yes
+Elapsed time: 0.954213 sec
+(main) root@C.28167832:/workspace/DV2606/A2/code$ nvcc task2.cu -o task2
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+(main) root@C.28167832:/workspace/DV2606/A2/code$ ./task2
+Sorted?: No
+Sorted?: Yes
+Elapsed time: 23.084 sec
+(main) root@C.28167832:/workspace/DV2606/A2/code$ 
