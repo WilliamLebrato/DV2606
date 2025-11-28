@@ -1,6 +1,6 @@
 /***************************************************************************
  *
- * Sequential version of Gauss-Jordan row reduction
+ * Parallel version of Gauss-Jordan row reduction
  *
  ***************************************************************************/
 
@@ -39,10 +39,27 @@ main(int argc, char** argv)
         Print_Matrix();
 }
 
+__global__ void normalize_kernel(double *A, double *b, double *y, int k, int n) 
+
+__global__ void elimination_kernel(double *A, double *b, double *y, int k, int n) 
+
+
 void
 work(void)
 {
     int i, j, k;
+
+    int threads = 256;
+    int blocks = 3;
+
+    //alocate matrix A and vectors b and y on device
+    double (*d_A)[MAX_SIZE];
+    double* d_b;
+    double* d_y;
+
+    cudaMalloc(&d_A, MAX_SIZE * MAX_SIZE * sizeof(double));
+    cudaMalloc(&d_b, MAX_SIZE * sizeof(double));
+    cudaMalloc(&d_y, MAX_SIZE * sizeof(double));
 
     /* Gaussian elimination algorithm, Algo 8.4 from Grama */
     for (k = 0; k < N; k++) { /* Outer loop */
@@ -63,6 +80,10 @@ work(void)
             A[i][k] = 0.0;
         }
     }
+
+    cudaMemcpy(d_A, A, MAX_SIZE * MAX_SIZE * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_b, b, MAX_SIZE * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, y, MAX_SIZE * sizeof(double), cudaMemcpyHostToDevice);
 }
 
 void

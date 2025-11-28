@@ -9,7 +9,7 @@ task1: task1.cu
 task2: task2.cu
 	nvcc task2.cu -o task2
 
-run: all
+sort: all
 	./oddevensort
 	./task1
 	./task2

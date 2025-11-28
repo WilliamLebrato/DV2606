@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <iostream>
 #include <chrono>
-#include <cuda.h>
 
 __global__ void evenPhaseKernel(int *array, int size)
 {
@@ -86,6 +85,5 @@ int main()
     std::cout << "Elapsed time: "
               << std::chrono::duration<double>(end - start).count()
               << " sec\n";
-
     return 0;
 }
