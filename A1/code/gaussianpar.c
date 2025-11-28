@@ -1,3 +1,4 @@
+// gaussianpar.c
 /***************************************************************************
  *
  * Sequential version of Gaussian elimination
