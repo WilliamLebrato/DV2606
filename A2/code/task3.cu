@@ -8,15 +8,17 @@
 
 #define MAX_SIZE 2048
 
-typedef double matrix[MAX_SIZE][MAX_SIZE];
 
 int	N;		/* matrix size		*/
 int	maxnum;		/* max number of element*/
-char* Init;		/* matrix init type	*/
+const char* Init;		/* matrix init type	*/
 int	PRINT;		/* print switch		*/
-matrix	A;		/* matrix A		*/
-double	b[MAX_SIZE];	/* vector b             */
-double	y[MAX_SIZE];	/* vector y             */
+
+// Pointer-based matrix and vectors
+double*    A;        /* matrix A		*/
+double*    b;		/* vector b		*/
+double*    y;		/* solution vector y	*/
+
 
 /* forward declarations */
 void work(void);
@@ -29,7 +31,6 @@ int
 main(int argc, char** argv)
 {
     printf("Gauss Jordan\n");
-    int i, timestart, timeend, iter;
 
     Init_Default();		/* Init default values	*/
     Read_Options(argc, argv);	/* Read arguments	*/
@@ -39,51 +40,94 @@ main(int argc, char** argv)
         Print_Matrix();
 }
 
-__global__ void normalize_kernel(double *A, double *b, double *y, int k, int n) 
-
-__global__ void elimination_kernel(double *A, double *b, double *y, int k, int n) 
-
-
-void
-work(void)
+__global__ void normalize_kernel(double *A, double *b, double *y, int k, int n)
 {
-    int i, j, k;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
 
-    int threads = 256;
-    int blocks = 3;
+    double pivot_coeff = A[k * n + k];
 
-    //alocate matrix A and vectors b and y on device
-    double (*d_A)[MAX_SIZE];
+
+    for (int j = idx + k + 1; j < n; j += stride) {
+        A[k * n + j] = A[k * n + j] / pivot_coeff;
+    }
+    
+
+    if (idx == 0) {
+        y[k] = b[k] / pivot_coeff; 
+        
+        A[k * n + k] = 1.0; 
+    }
+}
+
+__global__ void elimination_kernel(double *A, double *b, double *y, int k, int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+
+    // eliminate rows below pivot
+    for (int i = idx + k + 1; i < n; i += stride) {
+        double pivot_val = A[i * n + k];
+
+        for (int j = k + 1; j < n; j++) {
+            A[i * n + j] -= pivot_val * A[k * n + j];
+        }
+
+        b[i] -= pivot_val * y[k]; 
+
+        A[i * n + k] = 0.0;
+    }
+
+    // solve all rows above pivot
+    for (int i = idx; i < k; i += stride) {
+        double pivot_val = A[i * n + k];
+
+        for (int j = k + 1; j < n; j++) {
+            A[i * n + j] -= pivot_val * A[k * n + j];
+        }
+
+        y[i] -= pivot_val * y[k];
+
+        A[i * n + k] = 0.0;
+    }
+}
+
+void work(void)
+{
+    int  k; 
+
+    int threads = 1024;
+    int blocks = 2; 
+
+    double* d_A;
     double* d_b;
     double* d_y;
 
-    cudaMalloc(&d_A, MAX_SIZE * MAX_SIZE * sizeof(double));
-    cudaMalloc(&d_b, MAX_SIZE * sizeof(double));
-    cudaMalloc(&d_y, MAX_SIZE * sizeof(double));
+    // Allocate memory and copy to GPU
 
-    /* Gaussian elimination algorithm, Algo 8.4 from Grama */
-    for (k = 0; k < N; k++) { /* Outer loop */
-        for (j = k + 1; j < N; j++)
-            A[k][j] = A[k][j] / A[k][k]; /* Division step */
-        y[k] = b[k] / A[k][k];
-        A[k][k] = 1.0;
-        for (i = k + 1; i < N; i++) {
-            for (j = k + 1; j < N; j++)
-                A[i][j] = A[i][j] - A[i][k] * A[k][j]; /* Elimination step */
-            b[i] = b[i] - A[i][k] * y[k];
-            A[i][k] = 0.0;
-        }
-        for (i = 0; i < k; i++) {
-            for (j = k + 1; j < N; j++)
-                A[i][j] = A[i][j] - A[i][k] * A[k][j]; /* Additional Elimination for Gauss-Jordan */
-            y[i] = y[i] - A[i][k] * y[k];
-            A[i][k] = 0.0;
-        }
+    cudaMalloc((void**)&d_A, N * N * sizeof(double));
+    cudaMalloc((void**)&d_b, N * sizeof(double));
+    cudaMalloc((void**)&d_y, N * sizeof(double));
+
+    cudaMemcpy(d_A, A, N * N * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_b, b, N * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, y, N * sizeof(double), cudaMemcpyHostToDevice);
+
+    /* Gaussian elimination algorithm */
+    for (k = 0; k < N; k++) { 
+
+        normalize_kernel<<<blocks, threads>>>(d_A, d_b, d_y, k, N);
+
+        elimination_kernel<<<blocks, threads>>>(d_A, d_b, d_y, k, N);
     }
 
-    cudaMemcpy(d_A, A, MAX_SIZE * MAX_SIZE * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_b, b, MAX_SIZE * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_y, y, MAX_SIZE * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(A, d_A, N * N * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(b, d_b, N * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(y, d_y, N * sizeof(double), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_A);
+    cudaFree(d_b);
+    cudaFree(d_y);
 }
 
 void
@@ -91,28 +135,33 @@ Init_Matrix()
 {
     int i, j;
 
+    // Changed to pointers
+    A = (double*)malloc(N * N * sizeof(double));
+    b = (double*)malloc(N * sizeof(double));
+    y = (double*)malloc(N * sizeof(double));
+
     printf("\nsize      = %dx%d ", N, N);
     printf("\nmaxnum    = %d \n", maxnum);
-    printf("Init	  = %s \n", Init);
+    printf("Init      = %s \n", Init);
     printf("Initializing matrix...");
 
     if (strcmp(Init, "rand") == 0) {
         for (i = 0; i < N; i++) {
             for (j = 0; j < N; j++) {
                 if (i == j) /* diagonal dominance */
-                    A[i][j] = (double)(rand() % maxnum) + 5.0;
+                    A[i * N + j] = (double)(rand() % maxnum) + 5.0; // Adjusted
                 else
-                    A[i][j] = (double)(rand() % maxnum) + 1.0;
+                    A[i * N + j] = (double)(rand() % maxnum) + 1.0; // Adjusted
             }
         }
     }
     if (strcmp(Init, "fast") == 0) {
         for (i = 0; i < N; i++) {
             for (j = 0; j < N; j++) {
-                if (i == j) /* diagonal dominance */
-                    A[i][j] = 5.0;
+                if (i == j) 
+                    A[i * N + j] = 5.0; // Adjusted
                 else
-                    A[i][j] = 2.0;
+                    A[i * N + j] = 2.0; // Adjusted
             }
         }
     }
@@ -137,7 +186,7 @@ Print_Matrix()
     for (i = 0; i < N; i++) {
         printf("[");
         for (j = 0; j < N; j++)
-            printf(" %5.2f,", A[i][j]);
+            printf(" %5.2f,", A[i * N + j]); 
         printf("]\n");
     }
     printf("Vector y:\n[");
@@ -206,4 +255,5 @@ Read_Options(int argc, char** argv)
                 printf("HELP: try %s -u \n\n", prog);
                 break;
             }
+    return (0);
 }
