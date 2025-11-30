@@ -65,33 +65,31 @@ __global__ void elimination_kernel(double *A, double *b, double *y, int k, int n
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = blockDim.x * gridDim.x;
 
-    // eliminate rows below pivot
-    for (int i = idx + k + 1; i < n; i += stride) {
+    for (int i = idx; i < n; i += stride) {
+
+        // Skip the pivot row
+        if (i == k) continue;
+
         double pivot_val = A[i * n + k];
 
+        // Work on all columns to the right
         for (int j = k + 1; j < n; j++) {
             A[i * n + j] -= pivot_val * A[k * n + j];
         }
 
-        b[i] -= pivot_val * y[k]; 
-
-        A[i * n + k] = 0.0;
-    }
-
-    // solve all rows above pivot
-    for (int i = idx; i < k; i += stride) {
-        double pivot_val = A[i * n + k];
-
-        for (int j = k + 1; j < n; j++) {
-            A[i * n + j] -= pivot_val * A[k * n + j];
+        // Update b or y depending on row position
+        if (i > k) {
+            // Elimination below pivot
+            b[i] -= pivot_val * y[k];
+        } else {
+            // Solving above pivot
+            y[i] -= pivot_val * y[k];
         }
 
-        y[i] -= pivot_val * y[k];
-
+        // Zero out the pivot column entry
         A[i * n + k] = 0.0;
     }
 }
-
 void work(void)
 {
     int  k; 
